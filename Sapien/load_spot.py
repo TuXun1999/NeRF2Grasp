@@ -23,8 +23,8 @@ def demo(fix_root_link, balance_passive_force):
     # Load URDF
     loader: sapien.URDFLoader = scene.create_urdf_loader()
     loader.fix_root_link = fix_root_link
-    robot: sapien.Articulation = loader.load("./test_data/chair1/mobility.urdf")
-    robot.set_root_pose(sapien.Pose([0, 0, 0], [1, 0, 0, 0]))
+    robot: sapien.Articulation = loader.load("./test_data/SPOT/SPOT.urdf")
+    robot.set_root_pose(sapien.Pose([0, 0, 1.5], [1, 0, 0, 0]))
 
     # Set initial joint positions
     print(len(robot.get_joints()))
