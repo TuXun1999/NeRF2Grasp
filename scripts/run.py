@@ -66,7 +66,7 @@ def parse_args():
 	parser.add_argument("--n_steps", type=int, default=-1, help="Number of steps to train for before quitting.")
 	parser.add_argument("--second_window", action="store_true", help="Open a second window containing a copy of the main output.")
 	parser.add_argument("--vr", action="store_true", help="Render to a VR headset.")
-
+	parser.add_argument("--depth_supervision_lambda", type=float, default=0.1, help="Depth supervision lambda to enable training with depth")
 	parser.add_argument("--sharpen", default=0, help="Set amount of sharpening applied to NeRF training images. Range 0.0 to 1.0.")
 
 
@@ -171,7 +171,7 @@ if __name__ == "__main__":
 
 	old_training_step = 0
 	n_steps = args.n_steps
-
+	testbed.nerf.training.depth_supervision_lambda = args.depth_supervision_lambda
 	# If we loaded a snapshot, didn't specify a number of steps, _and_ didn't open a GUI,
 	# don't train by default and instead assume that the goal is to render screenshots,
 	# compute PSNR, or render a video.

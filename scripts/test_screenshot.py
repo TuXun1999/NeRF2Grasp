@@ -44,7 +44,7 @@ def render_image(resolution,scene,spp):
     # Intilazing list to save the transformation matrix of each rendered image.
     image_transformation = []
 
-    # testbed.render_mode = ngp.Depth
+    testbed.render_mode = ngp.Depth
     # Looping over the path of each camera.
     for i, current_path in enumerate(ref_transforms["path"]):
         
@@ -52,14 +52,26 @@ def render_image(resolution,scene,spp):
         testbed.fov = current_path["fov"]
 
         # Transforming the rotation quaternion to a (3,3) Rotation matrix.
-        r_quat = R.from_quat(current_path["R"])
-        r_matrix = r_quat.as_matrix()
-
-        # Translation array (3,1)
-        t = np.array((current_path["T"])).reshape(3,1)
-        
-        # Stacking the current Transformation matrix (3,4)
-        cam_matrix = np.hstack((r_matrix,t))
+        cam_matrix = np.matrix([
+                [
+                    0.8090169943749476,
+                    0.3454915028125266,
+                    -0.4755282581475771,
+                    -0.9287661291944864
+                ],
+                [
+                    -0.5877852522924736,
+                    0.4755282581475771,
+                    -0.6545084971874736,
+                    -1.2783369085692848
+                ],
+                [
+                    7.198293278059969e-17,
+                    0.8090169943749477,
+                    0.5877852522924736,
+                    1.148018070883737
+                ]
+            ])
 
         # Revesring NGP axis, scaling and offset.
         #cam_matrix = ngp_to_nerf(cam_matrix)
@@ -69,12 +81,10 @@ def render_image(resolution,scene,spp):
 
         # Rendering Current image.
         frame = testbed.render(resolution[0],resolution[1],spp,linear=True)
-        print("Check")
-        print(testbed.visualized_dimension)
-        print(testbed.render_mode)
+        
         frame_copy = np.array(frame)
         
-        if testbed.render_mode == ngp.Depth:
+        if testbed.render_mode == ngp.Depth or testbed.render_mode == ngp.Entropy:
             frame_copy = np.ones((frame.shape[0], frame.shape[1]))
             frame_copy = frame[:, :, 0] # Extract out the linear units;
             plt.imshow(frame_copy, cmap=plt.cm.gray_r)

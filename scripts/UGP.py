@@ -46,6 +46,7 @@ def parse_args():
     parser.add_argument("--gui", action="store_true", help="Run the testbed GUI interactively.")
     parser.add_argument("--train", action="store_true", help="If the GUI is enabled, controls whether training starts immediately.")
     parser.add_argument("--n_steps", type=int, default=-1, help="Number of steps to train for before quitting.")
+    parser.add_argument("--depth_supervision_lambda", type=float, default=0.1, help="Depth supervision lambda to enable training with depth")
     parser.add_argument("--second_window", action="store_true", help="Open a second window containing a copy of the main output.")
     parser.add_argument("--vr", action="store_true", help="Render to a VR headset.")
 
@@ -171,12 +172,13 @@ if __name__ == "__main__":
             ])
             entropy_pose1["render_image_name"] = "render_test_" + str(iter) + ".png"
             entropy_pose1["fov"] = 90
+
             entropy_poses.append(entropy_pose1)
             # Look at the entropy image as a reference
-            ugp_pipeline.get_render_image(entropy_poses, mode = "RGB")
-            ugp_pipeline.get_render_image(entropy_poses, mode = "entropy")
+            ugp_pipeline.get_render_image(entropy_poses, mode = "RGB", dupl_allow=True, real_scene_scale=1)
+            ugp_pipeline.get_render_image(entropy_poses, mode = "entropy", dupl_allow=True, real_scene_scale=1)
         
-        new_poses = ugp_pipeline.get_next_best_poses(camera_pose_candidates, real_scene_scale=64)
+        new_poses = ugp_pipeline.get_next_best_poses(camera_pose_candidates, dupl_allow = False, real_scene_scale=64)
         # Take the new 12 images and add them to the dataset
         ugp_pipeline.pyrender_take_snapshot(new_poses, pyrender_args)
 
@@ -220,5 +222,5 @@ if __name__ == "__main__":
         entropy_pose1["fov"] = 90
         entropy_poses.append(entropy_pose1)
         # Look at the entropy image as a reference
-        ugp_pipeline.get_render_image(entropy_poses, mode = "RGB")
-        ugp_pipeline.get_render_image(entropy_poses, mode = "entropy")
+        ugp_pipeline.get_render_image(entropy_poses, mode = "RGB", real_scene_scale=1)
+        ugp_pipeline.get_render_image(entropy_poses, mode = "entropy", real_scene_scale=1)

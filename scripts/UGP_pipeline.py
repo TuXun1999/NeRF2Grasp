@@ -343,8 +343,10 @@ class UGP_pipeline():
         # If we loaded a snapshot, didn't specify a number of steps, _and_ didn't open a GUI,
         # don't train by default and instead assume that the goal is to render screenshots,
         # compute PSNR, or render a video.
+
+        training_steps = 2500
         if self.n_steps < 0 and (not testbed_args.load_snapshot or testbed_args.gui):
-            self.n_steps = 2500
+            self.n_steps = training_steps
 
         # Whether to activate gui
         if testbed_args.gui:
@@ -359,8 +361,8 @@ class UGP_pipeline():
         if start_from_prev_snapshot == True:
             # Load the previous stored snapshot
             self.testbed.load_snapshot(testbed_args.save_snapshot)
-            self.n_steps = self.testbed.training_step + 2500 # Reset the training steps
-
+            self.n_steps = self.testbed.training_step + training_steps # Reset the training steps
+        self.testbed.nerf.training.depth_supervision_lambda = testbed_args.depth_supervision_lambda
         tqdm_last_update = 0
         if self.n_steps > 0:
             with tqdm(desc="Training", total=self.n_steps, unit="steps") as t:
@@ -544,7 +546,7 @@ class UGP_pipeline():
                 return scenes[scene]
         return None
     
-    def get_render_image(self, render_poses, mode = "entropy", snapshot_name = "/base.ingp", debug = True):
+    def get_render_image(self, render_poses, mode = "entropy", dupl_allow = True, real_scene_scale = 64, snapshot_name = "/base.ingp", debug = True):
         '''
         The function to get the screenshots taken at the specified poses
             Entropy mode:
@@ -553,7 +555,7 @@ class UGP_pipeline():
                 A visual image for reference
             Depth mode:
                 A depth image for reference
-        Input: render_poses: poses where the cameras are set up and take the snapshots
+        Input: render_poses: poses where the cameras are set up and take the snapshots (in real scene)
         Output: 
             Entropy mode:
                 return the mean pixel entropy values at those poses
@@ -586,7 +588,6 @@ class UGP_pipeline():
         else:
             print("Error! Unknown Rendering Mode")
             return
-        idx = 0
         
         # Looping over the path of each camera.
         for camera_pose in ref_transforms:
@@ -599,6 +600,11 @@ class UGP_pipeline():
                 # If the matrix is given as 4x4
                 cam_matrix = np.matrix(cam_matrix)[0:3]
 
+            # The camera poses are given in the real scene
+            # Should convert them into NeRF scene scale
+            cam_matrix[0, 3] = cam_matrix[0, 3] / real_scene_scale
+            cam_matrix[1, 3] = cam_matrix[1, 3] / real_scene_scale
+            cam_matrix[2, 3] = cam_matrix[2, 3] / real_scene_scale
             # Revesring NGP axis, scaling and offset.
             #cam_matrix = ngp_to_nerf(cam_matrix)
 
@@ -614,7 +620,14 @@ class UGP_pipeline():
                 frame_copy = frame[:, :, 0] # Extract out the linear units;
 
                 if self.testbed.render_mode == ngp.Entropy:
-                    entropy_frame_mean.append(np.mean(frame_copy))
+                    # Two cases:
+                    # If we allow choosing a selected camera pose, just append the mean value
+                    # If not, for the already selected camera pose, append -1 
+                    # (so that they will never be chosen)
+                    if dupl_allow == False and camera_pose["selected"] == True:
+                        entropy_frame_mean.append(-20.0)
+                    else:
+                        entropy_frame_mean.append(np.mean(frame_copy))
             else:
                 frame = self.testbed.render(resolution[0],resolution[1],spp,linear=False)
                 frame_copy = np.array(frame)
@@ -647,7 +660,7 @@ class UGP_pipeline():
             return
         
 
-    def get_next_best_poses(self, camera_pose_candidates, real_scene_scale = 64):
+    def get_next_best_poses(self, camera_pose_candidates, dupl_allow = True, real_scene_scale = 64):
         '''
         The function to select the next best poses to take images from 
         According to the original paper, one per sector, and 12 in total
@@ -688,10 +701,16 @@ class UGP_pipeline():
 
             camera_pose_sector = camera_pose_sector_1 + camera_pose_sector_2
 
-            entropy_values = self.get_render_image(camera_pose_sector, mode = "entropy", debug = False)
+            entropy_values = self.get_render_image(
+                    camera_pose_sector, 
+                    mode = "entropy",  
+                    dupl_allow = dupl_allow,
+                    real_scene_scale=real_scene_scale,  
+                    debug = False)
             idx = np.argmax(np.array(entropy_values)) # The image with the highest entropy/noise
-
+            camera_pose_sector[idx]["selected"] = True
             next_best_poses.append(camera_pose_sector[idx])
-        print("Length test")
-        print(len(next_best_poses))
         return next_best_poses
+    
+
+    
