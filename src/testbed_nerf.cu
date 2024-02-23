@@ -527,7 +527,7 @@ __global__ void composite_kernel_nerf(
 		}
 		float weight = alpha * T;
 		float weight_log = 0.0;
-		if (weight > 0.0001){
+		if (weight > 0.001){
 			// Set up a threshold (if weight is too small, weight * log(weight) = 0)
 			weight_log = -std::log2(weight);
 		}
