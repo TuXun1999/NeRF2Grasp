@@ -1,7 +1,7 @@
 import sapien.core as sapien
 from sapien.utils.viewer import Viewer
 import numpy as np
-
+import json
 def demo(fix_root_link, balance_passive_force):
     engine = sapien.Engine()
     renderer = sapien.SapienRenderer()
@@ -23,27 +23,43 @@ def demo(fix_root_link, balance_passive_force):
     # Load URDF
     loader: sapien.URDFLoader = scene.create_urdf_loader()
     loader.fix_root_link = fix_root_link
-    robot: sapien.Articulation = loader.load("./test_data/SPOT/SPOT.urdf")
-    robot.set_root_pose(sapien.Pose([0, 0, 1.5], [1, 0, 0, 0]))
+    robot: sapien.Articulation = loader.load("./Sapien/test_data/SPOT/urdf/SPOT.urdf")
+    robot.set_root_pose(sapien.Pose([0, 0, 0.48], [1, 0, 0, 0]))
 
     # Set initial joint positions
-    print(len(robot.get_joints()))
-    init_qpos = list(np.zeros(16))
+    x = robot.get_joints()
+    robot_stand_data_dir = "./Sapien/robot_stand_data.json"
+    with open(robot_stand_data_dir) as json_file:
+        robot_stand_data = json.load(json_file)
+    init_qpos = list(np.zeros(19))
+    idx = 0
+    for _, value in robot_stand_data.items():
+        
+        init_qpos[idx] = value
+        idx = idx + 1
     robot.set_qpos(init_qpos)
 
+    use_internal_PID = True
+    if use_internal_PID == True:
+        active_joints = robot.get_active_joints()
+        target_qpos = init_qpos
+        for joint_idx, joint in enumerate(active_joints):
+            joint.set_drive_property(stiffness=20, damping=5)
+            joint.set_drive_target(target_qpos[joint_idx])
+    
     while not viewer.closed:
-        for _ in range(4):  # render every 4 steps
+        for _ in range(4):  # render every 4 steps; TODO: correct
             if balance_passive_force:
                 qf = robot.compute_passive_force(
                     gravity=True, 
-                    coriolis_and_centrifugal=True, 
+                    coriolis_and_centrifugal=True 
                 )
                 robot.set_qf(qf)
             scene.step()
         scene.update_render()
         viewer.render()
 
-
+    
 def main():
     import argparse
     parser = argparse.ArgumentParser()

@@ -289,6 +289,7 @@ PYBIND11_MODULE(pyngp, m) {
 		.value("Distortion", ERenderMode::Distortion)
 		.value("Cost", ERenderMode::Cost)
 		.value("Slice", ERenderMode::Slice)
+		.value("Entropy", ERenderMode::Entropy)
 		.export_values();
 
 	py::enum_<ERandomMode>(m, "RandomMode")

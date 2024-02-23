@@ -63,12 +63,12 @@ def main():
     # Configure the json file
     camera_pose_file = open("./transforms.json", "w")
     # Obtain the intrinsic parameters of the camera
-    nerf_scale = 1 # The scale to fit the object into the unit cube
+    nerf_scale = 0.5 # The scale to fit the object into the unit cube
 
     result_dict = {}
     result_dict["w"] = 640
     result_dict["h"] = 480
-    result_dict["aabb_scale"] = 2
+    result_dict["aabb_scale"] = 1
     result_dict["fl_x"] = 240
     result_dict["k1"] = 0
     result_dict["p1"] = 0
@@ -104,19 +104,19 @@ def main():
     # Transformation matrix at the initial pose
     trans_initial = np.vstack((np.hstack((rot, d)), np.array([0, 0, 0, 1])))
 
-    # NeRF/Pyrender Camera: initially, the camera faces -z direction, +x as the lateral
-    # Rotate around the z-axis for pi/2
-    rot1_nerf = R.from_quat([0, 0, np.sin(np.pi/4), np.cos(np.pi/4)]).as_matrix()
+    # NeRF/Pyrender Camera: initially, the camera faces +z direction, +x as the lateral
+    # Rotate around the x-axis for pi/2
+    rot1_nerf = R.from_quat([np.sin(np.pi/4), 0, 0, np.cos(np.pi/4)]).as_matrix()
 
-    # Rotate around the y-axis for -pi/2
-    rot2_nerf= R.from_quat([0, np.sin(-np.pi/2), 0, np.cos(-np.pi/2)]).as_matrix()
+    # Rotate around the z-axis for pi/2
+    rot2_nerf= R.from_quat([0, 0, np.sin(-np.pi/4), np.cos(-np.pi/4)]).as_matrix()
     
     rot_nerf = np.matmul(rot2_nerf, rot1_nerf)
-
+    rot_nerf = np.vstack((np.hstack((rot_nerf, np.array([[0], [0], [0]]))), np.array([0, 0, 0, 1])))
     # Number of samples vertically
-    h_num = 1
+    h_num = 5
     # Number of samples along the circle around the object
-    i_num = 5
+    i_num = 30
 
     angle_dev_i = 2*np.pi/i_num
     angle_dev_h = (np.pi/2)/h_num
@@ -163,6 +163,21 @@ def main():
             # An alias is also provided
             # rgba = camera.get_color_rgba()  # [H, W, 4]
             rgba_img = (rgba * 255).clip(0, 255).astype("uint8")
+            
+            # Filter out the background (in simulation)
+            hi, wi, _ = rgba_img.shape
+            for hii in range(hi):
+                 for wii in range(wi):
+                    bg = rgba_img[hii, wii]
+                    if ray_tracing == True:
+                        if bg[0] == 186 and bg[1] == 186 and bg[2] == 186 and bg[3] == 255:
+                            # Value of the background from experiments (should be compatible)
+                            rgba_img[hii, wii] = np.array([0, 0, 0, 0])
+                    else:
+                        if bg[0] == 0 and bg[1] == 0 and bg[2] == 0 and bg[3] == 255:
+                            # Value of the background from experiments (should be compatible)
+                            rgba_img[hii, wii] = np.array([0, 0, 0, 0])
+
             rgba_pil = Image.fromarray(rgba_img, 'RGBA')
             rgba_pil.save("./images/chair_" + str(h) + "_" + str(i) + ".png")
 

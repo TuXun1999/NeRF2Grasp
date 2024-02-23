@@ -35,6 +35,7 @@
 
 #include <filesystem/directory.h>
 #include <filesystem/path.h>
+#include <bits/stdc++.h> 
 
 
 #ifdef copysign
@@ -525,6 +526,11 @@ __global__ void composite_kernel_nerf(
 			alpha = 1.f;
 		}
 		float weight = alpha * T;
+		float weight_log = 0.0;
+		if (weight > 0.0001){
+			// Set up a threshold (if weight is too small, weight * log(weight) = 0)
+			weight_log = -std::log2(weight);
+		}
 
 		vec3 rgb = network_to_rgb_vec(local_network_output, rgb_activation);
 
@@ -640,6 +646,8 @@ __global__ void composite_kernel_nerf(
 			rgb = vec3(dot(cam_fwd, pos - origin) * depth_scale);
 		} else if (render_mode == ERenderMode::AO) {
 			rgb = vec3(alpha);
+		} else if (render_mode == ERenderMode::Entropy){
+			rgb = vec3(weight_log);
 		}
 
 		if (show_accel >= 0) {
@@ -1328,6 +1336,8 @@ __global__ void shade_kernel_nerf(
 	} else if (gbuffer_hard_edges && render_mode == ERenderMode::Positions) {
 		vec3 pos = camera_matrix[3] + payload.dir / dot(payload.dir, camera_matrix[2]) * depth[i];
 		tmp.rgb() = (pos - 0.5f) / 2.0f + 0.5f;
+	} else if (render_mode == ERenderMode::Entropy){
+		tmp.rgb() = vec3(rgba[i][0], rgba[i][1], rgba[i][2]);
 	}
 
 	if (!train_in_linear_colors && (render_mode == ERenderMode::Shade || render_mode == ERenderMode::Slice)) {

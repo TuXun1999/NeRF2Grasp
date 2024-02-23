@@ -44,7 +44,7 @@ def render_image(resolution,scene,spp):
     # Intilazing list to save the transformation matrix of each rendered image.
     image_transformation = []
 
-    testbed.render_mode = ngp.Depth
+    testbed.render_mode = ngp.Entropy
     # Looping over the path of each camera.
     for i, current_path in enumerate(ref_transforms["path"]):
         
@@ -81,11 +81,12 @@ def render_image(resolution,scene,spp):
 
         # Rendering Current image.
         frame = testbed.render(resolution[0],resolution[1],spp,linear=True)
-        
+        assert frame[0, 0, 0] == frame[0, 0, 1]
         frame_copy = np.array(frame)
         
         if testbed.render_mode == ngp.Depth or testbed.render_mode == ngp.Entropy:
             frame_copy = np.ones((frame.shape[0], frame.shape[1]))
+            
             frame_copy = frame[:, :, 0] # Extract out the linear units;
             plt.imshow(frame_copy, cmap=plt.cm.gray_r)
             plt.show()
