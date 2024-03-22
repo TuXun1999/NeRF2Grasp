@@ -2,7 +2,7 @@ import numpy as np
 import open3d as o3d
 
  # read ply file
-pcd = o3d.io.read_point_cloud('chair.ply')
+pcd = o3d.io.read_point_cloud('./data/nerf/fuze/fuze.ply')
 a = np.asarray(pcd.points)
 c = np.asarray(pcd.colors)
 a_flipped = np.ones(a.shape)
@@ -22,4 +22,4 @@ camera_intrinsic = np.array([
 ])
 npy_data['K'] = camera_intrinsic
 
-np.save("point_cloud_test1", npy_data)
+np.save("./data/nerf/fuze/point_cloud_fuze", npy_data)
