@@ -164,7 +164,7 @@ M_fit = np.zeros((10, 10))
 N_fit = np.zeros((10, 10))
 
 p_sel_neighbor_idx = []
-p_sel_neighbor_th = 0.05
+p_sel_neighbor_th = 0.15
 
 # Find a small region around the sampled point
 for i in range(pc_num):

@@ -348,6 +348,8 @@ def calculate_darboux_frame(c, p_sel, vis, visualization = True, verbose = False
         print(p_sel_N)
         print(df_axis_1)
         print(df_axis_2)
+        print(k1)
+        print(k2)
         print(np.matmul(df_axis_1, p_sel_N))
         print(np.matmul(df_axis_2, p_sel_N))
         print(np.matmul(np.transpose(df_axis_1), df_axis_2))

@@ -72,10 +72,10 @@ class gripper_V_shape():
                 self.arm.append([i, ar * np.cos(ang), ar * np.sin(ang)])
 
         # Convert them into numpy array (with scaling)
-        self.rotation_axis = np.array(self.rotation_axis) * self.attributes["scale"]
-        self.upper_gripper = np.array(self.upper_gripper) * self.attributes["scale"]
-        self.lower_gripper = np.array(self.lower_gripper) * self.attributes["scale"]
-        self.arm = np.array(self.arm) * self.attributes["scale"]
+        self.rotation_axis = np.array(self.rotation_axis, order='C') * self.attributes["scale"]
+        self.upper_gripper = np.array(self.upper_gripper, order='C') * self.attributes["scale"]
+        self.lower_gripper = np.array(self.lower_gripper, order='C') * self.attributes["scale"]
+        self.arm = np.array(self.arm, order='C') * self.attributes["scale"]
 
         self.parts = [self.rotation_axis, self.upper_gripper, self.lower_gripper, self.arm]
 

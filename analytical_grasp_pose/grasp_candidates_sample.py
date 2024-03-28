@@ -1,10 +1,11 @@
 import numpy as np
 import open3d as o3d
 from gripper import gripper_V_shape
-from darboux_frame import *
+from darboux_frame import fit_neighbor, calculate_darboux_frame
 from scipy.spatial.transform import Rotation as R
 from sklearn.neighbors import KDTree
-from point_cloud_process import *
+from point_cloud_process import point_in_gripper
+import point_cloud_utils as pcu
 ## The main file to sample several grasp poses on the point cloud
 ## as well as evaulate the grasp qualities
 
@@ -14,8 +15,9 @@ gripper = gripper_V_shape(0.5, 0.3, 0.1, 0.1, 0.1, 0.5, scale=0.4)
 gripper.open_gripper(np.pi/2)
 
 # Read the npy file
-pc_file = np.load("point_cloud_chair.npy", allow_pickle=True)
-
+pc_file = np.load("point_cloud_fuze.npy", allow_pickle=True)
+pc_v, pc_f = pcu.load_mesh_vf("fuze.ply")
+print(pc_f)
 pc_file = pc_file.item()
 pc = pc_file['xyz']
 pc_colors = pc_file['xyz_color']
@@ -27,7 +29,7 @@ print('Visualizing...')
 # Visualize the data
 vis = o3d.visualization.Visualizer()
 pc_num = len(pc)
-p_sel_idx = np.random.randint(pc_num) #1080 #1570 #142
+p_sel_idx = 1862 #np.random.randint(pc_num) #1080 #1570 #142
 p_sel = pc[p_sel_idx]
 print(p_sel_idx)
 
@@ -75,6 +77,10 @@ df_tran = np.matmul(darboux_frame, df_tran_local)
 gripper.apply_transformation(df_tran)
 
 grasp_candidates = []
+
+# Find a large region around the sample point for collision check
+check_collision_pc_idx = pc_tree.query_radius(p_sel.reshape(1, -1), r=0.15)
+
 # Do a grid search to generate several grasp candidates
 for x in range(4):
     # Move the gripper a step forward (stepsize: 0.1)
@@ -99,14 +105,14 @@ for x in range(4):
         df_cand_rotate = np.matmul(darboux_frame, np.matmul(tran_rot, np.linalg.inv(darboux_frame)))
         gripper.apply_transformation(df_cand_rotate)
 
-        # Find a large region around the sample point for collision check
-        check_collision_pc_idx = pc_tree.query_radius(p_sel.reshape(1, -1), r=0.15)
 
         collision = False
         print("Calculate Min dist...")
         for part in gripper.parts:
             # Test the collision between each part of the gripper and the collision region
-            collision_dist = min_dist(part, range(len(part)), pc, check_collision_pc_idx[0])
+
+            dists, fid, bc = pcu.closest_points_on_mesh(part, pc_v, pc_f)
+            collision_dist = np.min(dists)
             
             if collision_dist < 0.01: #Too close
                 collision = True
@@ -145,12 +151,7 @@ for x in range(4):
 
 vis.create_window()
 vis.add_geometry(pcd)
-df_axis_1, df_axis_2, p_sel_N_curvature = calculate_darboux_frame(c, p_sel, vis)
-print("Test Grasp Candidate")
-print(gripper.attributes["gripper_width"])
-print(len(grasp_candidates))
-print(grasp_candidates[0])
-print(gripper.upper_gripper[25*51-1])
+df_axis_1, df_axis_2, p_sel_N_curvature = calculate_darboux_frame(c, p_sel, vis, verbose = True)
 
 # Visualize the grasp candidates
 for candidate in grasp_candidates:
