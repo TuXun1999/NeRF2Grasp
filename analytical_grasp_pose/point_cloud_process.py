@@ -65,3 +65,24 @@ def point_in_gripper(p, gripper):
     
     in_gripper = y_range and angle_range and dist_range
     return in_gripper, dist_range/gl
+
+
+## Section II: functions to determine whether the given point cloud 
+## forms a handle
+
+def points_proj_to_plane(pc_sel, pc_neighbor, df_axis_1):
+    # Project the local neighboring region around the selected point
+    # onto a plane orthogonal to the direction of minimum curvature
+    # Input: pc_neighbor: Nx3
+    N = pc_neighbor.shape[0]
+
+    # Transform the points in the neighboring region to the 
+    pc_neighbor_local = np.asarray(pc_neighbor) - pc_sel
+    pc_neighbor_local = np.transpose(np.asarray(pc_neighbor))
+    pc_proj = np.matmul(np.eye(3) - np.matmul(df_axis_1, np.transpose(df_axis_1)), pc_neighbor_local)
+    return pc_proj
+
+def fit_cylinder_shell(pc_proj):
+    # After project the points onto the plane, check whether
+    # the points can be fit to a cylinder shell
+    

@@ -9,18 +9,34 @@ import point_cloud_utils as pcu
 ## The main file to sample several grasp poses on the point cloud
 ## as well as evaulate the grasp qualities
 
-
+nerf_scale = 64/100
 # Build the V-shape gripper
-gripper = gripper_V_shape(0.5, 0.3, 0.1, 0.1, 0.1, 0.5, scale=0.4)
+gripper = gripper_V_shape(0.5, 0.3, 0.1, 0.1, 0.1, 0.5, scale=0.2)
 gripper.open_gripper(np.pi/2)
 
 # Read the npy file
-pc_file = np.load("point_cloud_fuze.npy", allow_pickle=True)
-pc_v, pc_f = pcu.load_mesh_vf("fuze.ply")
-print(pc_f)
-pc_file = pc_file.item()
-pc = pc_file['xyz']
-pc_colors = pc_file['xyz_color']
+filename="chair.ply"
+pcd = o3d.io.read_point_cloud(filename)
+pc_v, pc_f = pcu.load_mesh_vf(filename)
+if pc_f is None:
+    pc_f = []
+    # Using readlines()
+    file1 = open(filename, 'r')
+    lines = file1.readlines()
+    
+    # Strips the newline character
+    for line in lines:
+        line = line.split()
+        if line[0] == '3': # If the lines to specify facets have started
+            line = [int(line[1]), int(line[2]), int(line[3])] # Convert the indices into integers
+            pc_f.append(line)
+pc_f = np.array(pc_f)
+
+# Scale the point cloud into its original size
+pc = np.asarray(pcd.points) * nerf_scale
+pc_v = pc_v * nerf_scale 
+
+pc_colors = np.asarray(pcd.colors)
 pc_tree = KDTree(pc)
 print(len(pc))
 print('Visualizing...')
@@ -29,7 +45,7 @@ print('Visualizing...')
 # Visualize the data
 vis = o3d.visualization.Visualizer()
 pc_num = len(pc)
-p_sel_idx = 1862 #np.random.randint(pc_num) #1080 #1570 #142
+p_sel_idx = np.random.randint(pc_num) #1080 #1570 #142
 p_sel = pc[p_sel_idx]
 print(p_sel_idx)
 
@@ -38,10 +54,35 @@ print(p_sel_idx)
 # Visualize the calculated Darboux frame
 pcd = o3d.geometry.PointCloud()
 pcd.points = o3d.utility.Vector3dVector(pc)
-pcd.colors = o3d.utility.Vector3dVector(pc_colors.astype(np.float64) / 255)
+pcd.colors = o3d.utility.Vector3dVector(pc_colors.astype(np.float64))
 
-c = fit_neighbor(pc_tree, pc, p_sel, pcd)
-df_axis_1, df_axis_2, p_sel_N_curvature = calculate_darboux_frame(c, p_sel, vis)
+# Plot out the fundamental frame
+frame_points = [
+    [0, 0, 0],
+    [0.5, 0, 0],
+    [0, 0.5, 0],
+    [0, 0, 0.5]
+]
+frame_lines = [
+    [0, 1],
+    [0, 2],
+    [0, 3]
+]
+frame_colors = [
+    [1, 0, 0],
+    [0, 1, 0],
+    [0, 0, 1]
+]
+
+
+frame = o3d.geometry.LineSet()
+frame.points = o3d.utility.Vector3dVector(frame_points)
+frame.lines = o3d.utility.Vector2iVector(frame_lines)
+frame.colors = o3d.utility.Vector3dVector(frame_colors)
+
+
+c = fit_neighbor(pc_tree, pc, p_sel, pcd, th = 0.05)
+df_axis_1, df_axis_2, p_sel_N_curvature, _, _ = calculate_darboux_frame(c, p_sel, vis)
 print(df_axis_1)
 print(df_axis_2)
 print(p_sel_N_curvature)
@@ -79,7 +120,7 @@ gripper.apply_transformation(df_tran)
 grasp_candidates = []
 
 # Find a large region around the sample point for collision check
-check_collision_pc_idx = pc_tree.query_radius(p_sel.reshape(1, -1), r=0.15)
+check_collision_pc_idx = pc_tree.query_radius(p_sel.reshape(1, -1), r=0.2)
 
 # Do a grid search to generate several grasp candidates
 for x in range(4):
@@ -111,7 +152,7 @@ for x in range(4):
         for part in gripper.parts:
             # Test the collision between each part of the gripper and the collision region
 
-            dists, fid, bc = pcu.closest_points_on_mesh(part, pc_v, pc_f)
+            dists, fid, bc = pcu.closest_points_on_mesh(part.astype("float32", order='C'), pc_v, pc_f)
             collision_dist = np.min(dists)
             
             if collision_dist < 0.01: #Too close
@@ -151,7 +192,10 @@ for x in range(4):
 
 vis.create_window()
 vis.add_geometry(pcd)
-df_axis_1, df_axis_2, p_sel_N_curvature = calculate_darboux_frame(c, p_sel, vis, verbose = True)
+vis.add_geometry(frame)
+
+# Visualization purpose
+df_axis_1, df_axis_2, p_sel_N_curvature, _, _ = calculate_darboux_frame(c, p_sel, vis, verbose = False)
 
 # Visualize the grasp candidates
 for candidate in grasp_candidates:
@@ -169,8 +213,8 @@ for candidate in grasp_candidates:
         [0, 2]
     ]
     grasp_candidate_colors = [
-        [1 * color, 1- color, 0],
-        [1 * color, 1 - color, 0]
+        [0.5, 0.5, 0],
+        [0.5, 0.5, 0]
     ]
 
 
@@ -180,12 +224,12 @@ for candidate in grasp_candidates:
     grasp_candidate_V.colors = o3d.utility.Vector3dVector(grasp_candidate_colors)
     vis.add_geometry(grasp_candidate_V)
 
-# gripper_pcd = []
-# for part in gripper.parts:
-#     pcd = o3d.geometry.PointCloud()
-#     pcd.points = o3d.utility.Vector3dVector(part)
-#     pcd.colors = o3d.utility.Vector3dVector(0.1 * np.ones(part.shape))
-#     vis.add_geometry(pcd)
+gripper_pcd = []
+for part in gripper.parts:
+    pcd = o3d.geometry.PointCloud()
+    pcd.points = o3d.utility.Vector3dVector(part)
+    pcd.colors = o3d.utility.Vector3dVector(0.1 * np.ones(part.shape))
+    vis.add_geometry(pcd)
     
 vis.run()
 vis.destroy_window()

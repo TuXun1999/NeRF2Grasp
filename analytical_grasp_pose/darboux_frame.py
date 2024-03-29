@@ -103,7 +103,7 @@ def find_darboux_frame(L, M, N, E, F, G, hx, hy, orientation):
     
     return df_axis_1, df_axis_2, k1, k2
 
-def fit_neighbor(pc_tree, pc, p_sel, pcd, vis = True, verbose = False):
+def fit_neighbor(pc_tree, pc, p_sel, pcd, th = 0.05, vis = True, verbose = False):
     '''
     The function to find out the neighboring region of the selected pc
     and fit a quadratic surface to the region
@@ -123,7 +123,7 @@ def fit_neighbor(pc_tree, pc, p_sel, pcd, vis = True, verbose = False):
     N_fit = np.zeros((10, 10))
 
     p_sel_neighbor_idx = []
-    p_sel_neighbor_th = 0.05
+    p_sel_neighbor_th = th
 
     
     # Find a small region around the sampled point
@@ -278,7 +278,7 @@ def calculate_darboux_frame(c, p_sel, vis, visualization = True, verbose = False
     f_used = np.max((fx, fy, fz))
     f_dir = np.argmax((fx, fy, fz))
     print(f_dir)
-    if f_used < 1e-4:
+    if f_used < 1e-5:
         print("Error! fx, fy, fz are all 0; singular point")
         print("Use (I - NN^T)\grad N instead")
         # Use (I - N N^T) \grad N instead
@@ -324,7 +324,7 @@ def calculate_darboux_frame(c, p_sel, vis, visualization = True, verbose = False
         # If the direction with minimum curvature is "sharper"
         # ==> k1 < 0
 
-        # Convex along this direction
+        # Concave along this direction
         
         # Swap the two values, because now we are caring about the "sharper" direction
         # df_axis_1: the least sharpest direction
@@ -335,7 +335,7 @@ def calculate_darboux_frame(c, p_sel, vis, visualization = True, verbose = False
         # If the direction with maximum curvature is "sharper"
         # ==> k2 > 0
         
-        # Concave along this direction
+        # Convex along this direction
         p_sel_N_curvature = - p_sel_N_curvature
 
         df_axis_1 = np.cross(df_axis_2, p_sel_N_curvature)
@@ -356,11 +356,12 @@ def calculate_darboux_frame(c, p_sel, vis, visualization = True, verbose = False
 
 
     if vis: 
+        vis_length = 0.2 # Length of the axes
         # Draw out the normal vector & the Darboux Frame
-        p_sel_N_curvature_vis = p_sel + 0.2 * p_sel_N_curvature
+        p_sel_N_curvature_vis = p_sel + vis_length * p_sel_N_curvature
 
-        p_sel_d1_vis = p_sel + 0.2 * df_axis_1
-        p_sel_d2_vis = p_sel + 0.2 * df_axis_2
+        p_sel_d1_vis = p_sel + vis_length * df_axis_1
+        p_sel_d2_vis = p_sel + vis_length * df_axis_2
         darboux_frame_points = [
             [p_sel[0], p_sel[1], p_sel[2]],
             [p_sel_N_curvature_vis[0], p_sel_N_curvature_vis[1], p_sel_N_curvature_vis[2]],
@@ -385,6 +386,6 @@ def calculate_darboux_frame(c, p_sel, vis, visualization = True, verbose = False
         darboux_frame.colors = o3d.utility.Vector3dVector(darboux_frame_colors)
         vis.add_geometry(darboux_frame)
 
-    return df_axis_1, df_axis_2, p_sel_N_curvature
+    return df_axis_1, df_axis_2, p_sel_N_curvature, k1, k2
     
 
