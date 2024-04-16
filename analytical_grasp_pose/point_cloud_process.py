@@ -1,6 +1,6 @@
 import numpy as np
 import math
-
+from scipy.spatial.transform import Rotation as R
 def min_dist(pc1, pc1_idx, pc2, pc2_idx):
     '''
     Calculate the point pair with the minimum distance between pc1 and pc2
@@ -70,19 +70,93 @@ def point_in_gripper(p, gripper):
 ## Section II: functions to determine whether the given point cloud 
 ## forms a handle
 
-def points_proj_to_plane(pc_sel, pc_neighbor, df_axis_1):
+def points_proj_to_plane(pc_sel, pc_neighbor, df_axis_1, df_axis_2, p_sel_N_curvature):
     # Project the local neighboring region around the selected point
     # onto a plane orthogonal to the direction of minimum curvature
     # Input: pc_neighbor: Nx3
-    N = pc_neighbor.shape[0]
+    # Output: pr_proj: 2xN, points in the orthogonal plane
+    
+    # Construct the transformation frame
+    transformation = np.hstack((df_axis_1.reshape(-1,1), df_axis_2.reshape(-1,1), \
+                                p_sel_N_curvature.reshape(-1,1), pc_sel.reshape(-1,1)))
+    transformation = np.vstack((transformation, np.array([0, 0, 0, 1])))
 
-    # Transform the points in the neighboring region to the 
-    pc_neighbor_local = np.asarray(pc_neighbor) - pc_sel
-    pc_neighbor_local = np.transpose(np.asarray(pc_neighbor))
-    pc_proj = np.matmul(np.eye(3) - np.matmul(df_axis_1, np.transpose(df_axis_1)), pc_neighbor_local)
+    # Build up the matrix of all points
+    N = pc_neighbor.shape[0]
+    pc_neighbor_homo = np.transpose(pc_neighbor)
+    pc_neighbor_homo = np.vstack((pc_neighbor_homo, np.ones((1, N))))
+
+    # Find the projected points in the local frame & Extract the y&z coordinates
+    pc_proj = np.matmul(np.linalg.inv(transformation), pc_neighbor_homo)[1:3, :]
     return pc_proj
 
 def fit_cylinder_shell(pc_proj):
     # After project the points onto the plane, check whether
     # the points can be fit to a cylinder shell
-    
+    # Input: pc_proj: 2xN
+    # Return:
+    # hx, hy: center of the circle in the LOCAL frame
+    # r: radius of the circle
+    # error: average fitting error
+    N = pc_proj.shape[1]
+    L = -np.vstack((pc_proj, -np.ones((1, N))))
+    # Calculate \sum_i l_i l_i^T
+    LLi = np.matmul(L, np.transpose(L))
+
+    # Calculate \lambda, where \lambda_i = x_i^2 + y_i^2
+    lambda_i = np.sum(pc_proj[0:2] * pc_proj[0:2], axis=0).reshape(-1, 1)
+    L_lambda = np.matmul(L, lambda_i)
+
+    # Calculate the coefficients according to the formulas given in the paper
+    w = -np.matmul(np.linalg.inv(LLi), L_lambda).flatten()
+
+    hx = 0.5 * w[0]
+    hy = 0.5 * w[1]
+    r = math.sqrt(hx*hx + hy*hy - w[2])
+
+    circle_center = np.array([[hx], [hy]])
+    error_matrix = pc_proj - circle_center
+    error_matrx = error_matrix * error_matrix
+    error_vector = np.sum(error_matrix, axis=0) - r*r
+    error = np.mean(error_vector)
+
+    return hx, hy, r, error
+
+def generate_contact_graspnet_file(gripper_pose, pc_sel_neighbor):
+    '''
+    The function to generate the pcd file to be fed into 
+    Contact GraspNet to obtain the grasp candidates
+    Input: gripper_pose: 4x4 transformation matrix, the transformation of the gripper frame
+        pc_sel_neighbor: Nx3, the neighboring region of the selected point 
+    Output: 
+        a .npy file for the Contact GraspNet
+    '''
+    # Convert the local region into the standard format
+    pc_sel_neighbor_homo = np.vstack((pc_sel_neighbor.T, np.ones((1, pc_sel_neighbor.shape[0]))))
+    local_points = np.matmul(np.linalg.inv(gripper_pose), pc_sel_neighbor_homo)
+
+    # Obey the frame convention of Contact GraspNet (z -> from the camera to the object)
+    local_transformation = R.from_quat([0, np.sin(-np.pi/4), 0, np.cos(-np.pi/4)]).as_matrix()
+    local_transformation = np.vstack(\
+        (np.hstack((local_transformation, np.array([[0],[0],[0]]))), np.array([0, 0, 0, 1])))
+    local_points = np.matmul(local_transformation, local_points)
+
+    # (Optional) Test Equivariance, by rotating the points along z at a random angle
+    angle = 0 #2 * math.pi * np.random.random()
+    rotZ = R.from_quat([0, 0, np.sin(angle/2), np.cos(angle/2)]).as_matrix()
+    rotZ = np.vstack(\
+        (np.hstack((rotZ, np.array([[0],[0],[0]]))), np.array([0, 0, 0, 1])))
+    local_points = np.matmul(rotZ, local_points)
+    # Write up the npy file
+    c = np.ones((local_points.shape[1], 3))/ 255
+    npy_data = {}
+    npy_data['xyz_color'] = c
+    npy_data['xyz'] = local_points[0:3, :].T
+    camera_intrinsic = np.array([
+        [400, 0, 400],
+        [0, 400, 400],
+        [0, 0, 1]
+    ])
+    npy_data['K'] = camera_intrinsic
+
+    np.save("../../contact_graspnet_pytorch/test_data/chair_local_region", npy_data)

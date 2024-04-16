@@ -103,7 +103,7 @@ def find_darboux_frame(L, M, N, E, F, G, hx, hy, orientation):
     
     return df_axis_1, df_axis_2, k1, k2
 
-def fit_neighbor(pc_tree, pc, p_sel, pcd, th = 0.05, vis = True, verbose = False):
+def fit_neighbor(pc, pcd, p_sel_neighbor_idx, visualization = True, verbose = False):
     '''
     The function to find out the neighboring region of the selected pc
     and fit a quadratic surface to the region
@@ -122,25 +122,10 @@ def fit_neighbor(pc_tree, pc, p_sel, pcd, th = 0.05, vis = True, verbose = False
     M_fit = np.zeros((10, 10))
     N_fit = np.zeros((10, 10))
 
-    p_sel_neighbor_idx = []
-    p_sel_neighbor_th = th
-
-    
-    # Find a small region around the sampled point
-    p_sel_neighbor_idx = pc_tree.query_radius(p_sel.reshape(1, -1), r=p_sel_neighbor_th)
-    # for i in range(pc_num):
-    #     p_neighbor_cand = pc[i]
-    #     dist = math.sqrt((p_neighbor_cand[0] - p_sel[0]) ** 2 + \
-    #                     (p_neighbor_cand[1] - p_sel[1]) ** 2 + \
-    #                     (p_neighbor_cand[2] - p_sel[2]) ** 2)
-    #     if (dist < p_sel_neighbor_th):
-    #         p_sel_neighbor_idx.append(i)
-    
-    p_sel_neighbor_idx = np.array(p_sel_neighbor_idx[0])
     
     ## Find a quadratic surface to fit to the points
     for i in p_sel_neighbor_idx:
-        if vis:
+        if visualization:
             # Recolor the points in red
             pcd.colors[i] = [1.0, 0.0, 0.0]
         p = pc[i]
@@ -224,7 +209,7 @@ def fit_neighbor(pc_tree, pc, p_sel, pcd, th = 0.05, vis = True, verbose = False
         print("==============")
 
     return c
-def calculate_darboux_frame(c, p_sel, vis, visualization = True, verbose = False):
+def calculate_darboux_frame(c, p_sel, vis, visualization = True, verbose = False, reference_normal = None):
     '''
     The function to calculate the darboux frame at the specified point
 
@@ -277,10 +262,11 @@ def calculate_darboux_frame(c, p_sel, vis, visualization = True, verbose = False
     # df[i][j] = \frac{d f_i}{d x_j}
     f_used = np.max((fx, fy, fz))
     f_dir = np.argmax((fx, fy, fz))
-    print(f_dir)
-    if f_used < 1e-5:
-        print("Error! fx, fy, fz are all 0; singular point")
+    quadratic = True # Whether it's good to approximate the local region with a quadratic surface
+    if f_used < 1e-6:
+        print("Error! fx, fy, fz are all nearly 0; flat surface")
         print("Use (I - NN^T)\grad N instead")
+        quadratic = False
         # Use (I - N N^T) \grad N instead
         dN = np.zeros((3,3))
         for a in range(3):
@@ -320,26 +306,42 @@ def calculate_darboux_frame(c, p_sel, vis, visualization = True, verbose = False
 
     # Normalize the normal vector
     p_sel_N_curvature = p_sel_N_curvature / np.linalg.norm(p_sel_N_curvature)
-    if (abs(k1) > abs(k2)):
-        # If the direction with minimum curvature is "sharper"
-        # ==> k1 < 0
-
-        # Concave along this direction
+    if reference_normal is None: 
+        # If no reference normal is used, i.e. no reference direction
+        # for an outward normal vector,
+        # then we choose to grasp along the sharper direction
+        #
         
-        # Swap the two values, because now we are caring about the "sharper" direction
-        # df_axis_1: the least sharpest direction
-        # df_axis_2: the sharpest direction
-        df_axis_1, df_axis_2 = df_axis_2, df_axis_1
-        df_axis_1 = np.cross(df_axis_2, p_sel_N_curvature)
+        if (abs(k1) > abs(k2)):
+            # If the direction with minimum curvature is "sharper"
+            # ==> k1 < 0
+
+            # Concave along this direction
+            
+            # Swap the two values, because now we are caring about the "sharper" direction
+            # df_axis_1: the least sharpest direction
+            # df_axis_2: the sharpest direction
+            df_axis_1, df_axis_2 = df_axis_2, df_axis_1
+            df_axis_1 = np.cross(df_axis_2, p_sel_N_curvature)
+        else:
+            # If the direction with maximum curvature is "sharper"
+            # ==> k2 > 0
+            
+            # Convex along this direction
+            p_sel_N_curvature = - p_sel_N_curvature
+
+            df_axis_1 = np.cross(df_axis_2, p_sel_N_curvature)
     else:
-        # If the direction with maximum curvature is "sharper"
-        # ==> k2 > 0
-        
-        # Convex along this direction
-        p_sel_N_curvature = - p_sel_N_curvature
+        # If a reference normal vector is given to specify the direction of the normal vector
+        prod = np.dot(p_sel_N_curvature, reference_normal)
+        if 1 - prod > 0.1 and 1 + prod > 0.1: # The two normal vectors are not aligned well
+            quadratic = False
+            df_axis_1 = np.cross(df_axis_2, p_sel_N_curvature) # Just return one candidate of darboux frame
+        else: # If the two normal vectors align well
+            if prod < 0: # Opposite direction
+                p_sel_N_curvature = -p_sel_N_curvature
+            df_axis_1 = np.cross(df_axis_2, p_sel_N_curvature)
 
-        df_axis_1 = np.cross(df_axis_2, p_sel_N_curvature)
-    
 
     if verbose:
         print("===========")
@@ -355,7 +357,7 @@ def calculate_darboux_frame(c, p_sel, vis, visualization = True, verbose = False
         print(np.matmul(np.transpose(df_axis_1), df_axis_2))
 
 
-    if vis: 
+    if visualization: 
         vis_length = 0.2 # Length of the axes
         # Draw out the normal vector & the Darboux Frame
         p_sel_N_curvature_vis = p_sel + vis_length * p_sel_N_curvature
@@ -386,6 +388,6 @@ def calculate_darboux_frame(c, p_sel, vis, visualization = True, verbose = False
         darboux_frame.colors = o3d.utility.Vector3dVector(darboux_frame_colors)
         vis.add_geometry(darboux_frame)
 
-    return df_axis_1, df_axis_2, p_sel_N_curvature, k1, k2
+    return df_axis_1, df_axis_2, p_sel_N_curvature, k1, k2, quadratic
     
 
