@@ -32,6 +32,7 @@ o3d.visualization.draw_geometries([pcd,frame])
 
 print("Define parameters used for hidden_point_removal (at different locations)")
 locations = [
+    [0, 0, 0],
     [0, 0, diameter],
     [diameter, 0, 0],
     [0, diameter, 0],

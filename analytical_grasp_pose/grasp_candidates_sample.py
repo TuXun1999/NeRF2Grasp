@@ -21,7 +21,7 @@ nerf_scale = 0.64
 Section I: Read the whole object
 '''
 # Read the ply file
-filename="chair_real.ply"
+filename="chair2.ply"
 file1 = open(filename, "r")
 
 # pc_v, pc_f are the original complete file
@@ -62,11 +62,14 @@ pcd = o3d.geometry.PointCloud()
 pcd.points = o3d.utility.Vector3dVector(pc)
 pcd.colors = o3d.utility.Vector3dVector(pc_colors.astype(np.float64) / 255)
 
-voxel_down_pcd = pcd.voxel_down_sample(voxel_size=0.005)
-cl, ind = voxel_down_pcd.remove_radius_outlier(nb_points=16, radius=0.05)
+voxel_down_pcd = pcd.voxel_down_sample(voxel_size=0.01)
+cl, ind = voxel_down_pcd.remove_radius_outlier(nb_points=3, radius=0.5)
 voxel_down_pcd = voxel_down_pcd.select_by_index(ind)
 #voxel_down_pcd.estimate_normals()
 
+# Save the downsample point cloud (currently, it's still too dense)
+o3d.io.write_point_cloud("downsample_" + filename, voxel_down_pcd)
+                         
 pc = np.array(voxel_down_pcd.points)
 pc_colors = np.array(voxel_down_pcd.colors)
 pc_tree = KDTree(pc)
@@ -116,7 +119,7 @@ p_sel_candidates = np.asarray(voxel_down_pcd.points)[p_sel_idx]
 # normals_upper = normals[pc_upper_m]
 
 # Threshold of neighboring regions
-th = 0.03
+th = 0.1
 
 
 # Create the window to display grasp pose detection results

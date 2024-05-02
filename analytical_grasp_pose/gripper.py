@@ -131,3 +131,32 @@ class gripper_V_shape():
         self.arm = self.parts[3]
 
         self.frame = np.matmul(tran, self.frame)
+
+
+class gripper_parallel():
+    '''
+    The class to define a parallel gripper,
+    containing its point cloud
+    '''
+    def __init__(self, filename, width, length, scale = 1):
+        # Read the pc file and extract out the point information
+        self.pc = o3d.io.read_point_cloud(filename)
+        self.scale = scale
+
+        self.points = self.pc.points * self.scale
+
+        # By default, the rotation axis is along z-axis ([0, 0, 1])
+        # the direction of the gripper is along x-axis ([1, 0, 0])
+        self.rotation_axis = np.array([0, 0, 1, 1]).view(1, -1)
+        self.gripper_axis = np.array([1, 0, 0, 1]).view(1, -1)
+    
+        # Other attributes of the gripper
+        self.gripper_width = width
+        self.gripper_length = length
+    def apply_transformation(self, tran):
+        # Convert the points into homogeneous coordinates
+        points_homo = np.transpose(np.hstack((self.points, np.ones((self.points.shape[0], 1)))))
+
+        self.points = np.matmul(tran, points_homo)
+        self.rotation_axis = np.matmul(tran, self.rotation_axis)
+        self.gripper_axis = np.matmul(tran, self.gripper_axis)

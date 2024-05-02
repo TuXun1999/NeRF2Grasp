@@ -60,7 +60,7 @@ pcd.colors = o3d.utility.Vector3dVector(pc_colors.astype(np.float64) / 255)
 voxel_down_pcd = pcd.voxel_down_sample(voxel_size=0.005)
 cl, ind = voxel_down_pcd.remove_radius_outlier(nb_points=16, radius=0.05)
 voxel_down_pcd = voxel_down_pcd.select_by_index(ind)
-voxel_down_pcd.estimate_normals()
+# voxel_down_pcd.estimate_normals()
 
 pc = np.array(voxel_down_pcd.points)
 pc_colors = np.array(voxel_down_pcd.colors)
@@ -105,7 +105,7 @@ pc_upper = pc[pc_upper_m]
 # normals_upper = normals[pc_upper_m]
 
 # Threshold of neighboring regions
-th = 0.03
+th = 0.1
 
 # Uniformly sample 100 points on the upper half of the chair
 pc_upper_num = len(pc_upper)
@@ -136,14 +136,14 @@ for p_sel_upper_idx in p_sel_upper_indices:
     df_axis_1, df_axis_2, p_sel_N_curvature, k1 , k2 , quadratic = \
         calculate_darboux_frame(c, p_sel, vis, visualization = False)
     
-    if (np.max((abs(k1), abs(k2))) < 30) or quadratic == False: 
+    if (np.max((abs(k1), abs(k2))) < 50): 
         # Only consider the parts with enough curvatures & Close to a cylinder
         continue
     # Find the fitted cylinder
     pc_proj = points_proj_to_plane(p_sel, pc_neighbor, df_axis_1, df_axis_2, p_sel_N_curvature)
     hx, hy, r, error = fit_cylinder_shell(pc_proj)
 
-    if error < 0.005: # If the fitting error is small
+    if error < 0.01: # If the fitting error is small
         df_axis_1, df_axis_2, p_sel_N_curvature, k1 , k2 , flat = \
              calculate_darboux_frame(c, p_sel, vis, visualization = True)
         # Mark the local neighboring region red
