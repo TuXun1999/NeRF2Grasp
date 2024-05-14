@@ -12,7 +12,7 @@
     "cy": 400,
     "camera_angle_x": 1.5707963267948966,
     "camera_angle_y": 1.5707963267948966,
-    "enable_depth_loading": true,
+    "enable_depth_loading": false,
     "integer_depth_scale": 7.152666514076448e-05,
     "frames": [
         {

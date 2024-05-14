@@ -44,7 +44,7 @@ def render_image(resolution,scene,spp):
     # Intilazing list to save the transformation matrix of each rendered image.
     image_transformation = []
 
-    testbed.render_mode = ngp.Entropy
+    testbed.render_mode = ngp.Depth
     # Looping over the path of each camera.
     for i, current_path in enumerate(ref_transforms["path"]):
         
@@ -54,16 +54,16 @@ def render_image(resolution,scene,spp):
         # Transforming the rotation quaternion to a (3,3) Rotation matrix.
         cam_matrix = np.matrix([
                 [
-                    0.8090169943749476,
-                    0.3454915028125266,
-                    -0.4755282581475771,
-                    -0.9287661291944864
+                    0.5000000000000007,
+                    -0.5090369604551274,
+                    0.7006292692220365,
+                    1.3684165414492906
                 ],
                 [
-                    -0.5877852522924736,
-                    0.4755282581475771,
-                    -0.6545084971874736,
-                    -1.2783369085692848
+                    0.8660254037844387,
+                    0.293892626146237,
+                    -0.40450849718747417,
+                    -0.7900556585692854
                 ],
                 [
                     7.198293278059969e-17,
@@ -82,10 +82,11 @@ def render_image(resolution,scene,spp):
         # Rendering Current image.
         frame = testbed.render(resolution[0],resolution[1],spp,linear=True)
         assert frame[0, 0, 0] == frame[0, 0, 1]
+        print("Test!")
+        print(frame[462][249])
         frame_copy = np.array(frame)
         
         if testbed.render_mode == ngp.Depth or testbed.render_mode == ngp.Entropy:
-            frame_copy = np.ones((frame.shape[0], frame.shape[1]))
             
             frame_copy = frame[:, :, 0] # Extract out the linear units;
             plt.imshow(frame_copy, cmap=plt.cm.gray_r)

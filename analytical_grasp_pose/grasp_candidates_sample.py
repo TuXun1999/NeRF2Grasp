@@ -9,19 +9,13 @@ import point_cloud_utils as pcu
 ## The main file to sample several grasp poses on the point cloud
 ## as well as evaulate the grasp qualities
 
-nerf_scale = 64/100
-
-
-## The main file to sample several grasp poses on the point cloud
-## as well as evaulate the grasp qualities
-
-nerf_scale = 0.64
+nerf_scale = 64
 
 '''
 Section I: Read the whole object
 '''
 # Read the ply file
-filename="chair2.ply"
+filename="chair_upper.ply"
 file1 = open(filename, "r")
 
 # pc_v, pc_f are the original complete file
@@ -63,9 +57,14 @@ pcd.points = o3d.utility.Vector3dVector(pc)
 pcd.colors = o3d.utility.Vector3dVector(pc_colors.astype(np.float64) / 255)
 
 voxel_down_pcd = pcd.voxel_down_sample(voxel_size=0.01)
-cl, ind = voxel_down_pcd.remove_radius_outlier(nb_points=3, radius=0.5)
+cl, ind = voxel_down_pcd.remove_radius_outlier(nb_points=3, radius=5)
 voxel_down_pcd = voxel_down_pcd.select_by_index(ind)
 #voxel_down_pcd.estimate_normals()
+
+# TODO: find a way to correct the issue before this file
+pc = np.array(voxel_down_pcd.points)
+pc[:, [0, 1, 2]] = pc[:, [2, 0, 1]]
+voxel_down_pcd.points = o3d.utility.Vector3dVector(pc)
 
 # Save the downsample point cloud (currently, it's still too dense)
 o3d.io.write_point_cloud("downsample_" + filename, voxel_down_pcd)
@@ -79,9 +78,9 @@ print(len(pc))
 # Plot out the fundamental frame
 frame_points = [
     [0, 0, 0],
-    [0.5, 0, 0],
-    [0, 0.5, 0],
-    [0, 0, 0.5]
+    [50, 0, 0],
+    [0, 50, 0],
+    [0, 0, 50]
 ]
 frame_lines = [
     [0, 1],
@@ -106,10 +105,12 @@ vis_pick.add_geometry(voxel_down_pcd)
 vis_pick.add_geometry(frame)
 vis_pick.run()
 vis_pick.destroy_window()
-p_sel_idx = np.asarray(vis_pick.get_picked_points()).astype('int')
-print(p_sel_idx)
-p_sel_candidates = np.asarray(voxel_down_pcd.points)[p_sel_idx]
 
+# Select the point coordinates
+p_sel_idx = np.asarray(vis_pick.get_picked_points()).astype('int')
+p_sel_candidates = np.asarray(voxel_down_pcd.points)[p_sel_idx]
+print("Select Point Coordinates")
+print(p_sel_candidates)
 ##
 ## Generate grasp poses
 ##
@@ -119,7 +120,7 @@ p_sel_candidates = np.asarray(voxel_down_pcd.points)[p_sel_idx]
 # normals_upper = normals[pc_upper_m]
 
 # Threshold of neighboring regions
-th = 0.1
+th = 10
 
 
 # Create the window to display grasp pose detection results
@@ -130,7 +131,7 @@ vis.create_window()
 #p_sel_indices = [19196, 19672]
 for p_sel in p_sel_candidates:
     # Build the gripper
-    gripper = gripper_V_shape(0.5, 0.3, 0.1, 0.1, 0.1, 0.5, scale=0.2)
+    gripper = gripper_V_shape(0.5, 0.3, 0.1, 0.1, 0.1, 0.5, scale=20)
     gripper.open_gripper(np.pi/2)
 
     # Find a small region around the sampled point
@@ -138,7 +139,7 @@ for p_sel in p_sel_candidates:
     if p_sel_neighbor_idx.shape[0] < 16: # NOt enough points in the local region
         continue
     # An approximate region selected by the human
-    if p_sel[1] < -0.1:
+    if p_sel[2] < -20:
         continue
 
     # A larger region for grasp pose detection
@@ -181,7 +182,7 @@ for p_sel in p_sel_candidates:
     df_tran2 = np.array([
         [1, 0, 0, 0],
         [0, 1, 0, 0],
-        [0, 0, 1, 0.3],
+        [0, 0, 1, 30],
         [0, 0, 0, 1]
     ])
     df_tran3 = R.from_quat([0, 0, np.sin(np.pi/4), np.cos(np.pi/4)]).as_matrix()
