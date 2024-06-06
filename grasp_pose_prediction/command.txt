@@ -1,0 +1,1 @@
+python3 ./grasp_pose_prediction/grasp_contact_graspnet.py --np_path=./npy_data/sq_npy_data.npy --forward_passes=5 --z_range=[0.2,1.1]

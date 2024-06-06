@@ -14,6 +14,7 @@
     "camera_angle_y": 1.5707963267948966,
     "enable_depth_loading": false,
     "integer_depth_scale": 7.152666514076448e-05,
+    "nerf_scale": 64,
     "frames": [
         {
             "file_path": "./images/chair_0_0.png",

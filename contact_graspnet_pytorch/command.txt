@@ -1,1 +1,0 @@
-python3 contact_graspnet_pytorch/inference.py --np_path=./test_data/sq_npy_data.npy --forward_passes=5 --z_range=[0.2,1.1]
