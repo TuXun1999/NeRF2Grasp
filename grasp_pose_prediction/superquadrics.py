@@ -5,6 +5,8 @@ import scipy
 from scipy.spatial.transform import Rotation as R
 import pickle
 import os
+from pytorch3d.ops import box3d_overlap
+import torch
 '''
 The file containing all the necessary helper functions in processing sq's
 '''
@@ -279,10 +281,105 @@ def read_sq_directory(sq_dir, norm_scale, norm_d):
                                     "transformation": sq_tran})
     return sq_vertices, sq_transformation
 
+def read_sq_mp(sq_mp, norm_scale, norm_d):
+    '''
+    The function to read the predicted superquadrics from Marching Primitives
+    Input:
+    sq_mp: the array containing parameters for all sq's (Nx11)
+    Format: e1, e2, a1, a2, a3, r, p, y, tx, ty, tz
+    normalize_stats: the statistics for normalized => restore the normalize process
+    '''
+    sq_vertices = []
+    sq_transformation = []
+    norm = norm_scale
+    c = norm_d
+
+    def eul2rotm(eul):
+        '''
+        The function to convert euler angles into a rotation matrix
+        '''
+        Rot = np.zeros((3,3))
+        ct = np.cos(eul)
+        st = np.sin(eul)
+        Rot[0, 0] = ct[1] * ct[0]
+        Rot[0, 1] = st[2] * st[1] * ct[0] - ct[2] * st[0]
+        Rot[0, 2] = ct[2] * st[1] *ct[0] + st[2] * st[0]
+        Rot[1, 0] = ct[1] * st[0]
+        Rot[1, 1] = st[2] * st[1] * st[0] + ct[2]*ct[0]
+        Rot[1, 2] = ct[2] * st[1]* st[0] - st[2]*ct[0]
+        Rot[2, 0] = -st[1]
+        Rot[2, 1] = st[2] * ct[1]
+        Rot[2, 2] = ct[2] * ct[1]     
+
+        return Rot  
+    # Read the sq attributes in each file
+    for i in range(sq_mp.shape[0]):
+        # Read the superquadrics' parameters
+        parameters = {}
+        e1, e2, a1, a2, a3, r, p, y, t1, t2, t3 = sq_mp[i, :]
+        if e1 < 0.01:
+            e1 = 0.01
+        if e2 < 0.01:
+            e2 = 0.01
+
+        # Basic parameters for shape
+        parameters["shape"] = np.array([e1, e2])
+        parameters["size"] = np.array([a1, a2, a3])
+
+        # Parameters for transformation
+        translation = np.array([t1, t2, t3])
+        parameters["location"] = translation
+
+        rot = eul2rotm(np.array([r, p, y]))
+        parameters["rotation"] = rot
+
+        # Custom function to sample points on the superquadrics
+        pc = create_superellipsoids(e1, e2, a1, a2, a3)
+
+        # Apply the transformation
+
+        # Obtain the correct point coordinates in the normalized frame
+        pc_tran = np.matmul(rot, pc.T) + translation.reshape(3, -1)
+        pc_tran = pc_tran.T
+        sq_tran = np.vstack((np.hstack((rot, translation.reshape(3, -1))), np.array([0, 0, 0, 1])))
+
+        # Revert the normalization process
+        pc_tran = pc_tran * norm + c
+        sq_tran[0:3, 3] = sq_tran[0:3, 3] * norm + c
+
+        sq_vertices.append(pc_tran)
+        sq_transformation.append({"sq_parameters": parameters, \
+                                    "points": pc_tran, \
+                                    "transformation": sq_tran})
+    return sq_vertices, sq_transformation
+
+
+def read_mp_parameters(filename):
+    '''
+    The function to read the parameters pre-stored in the file
+    '''
+    with (open(filename, "rb")) as openfile:
+        parameters = pickle.load(openfile)
+            
+    return parameters["sq_vertices_original"], \
+        parameters["sq_transformation"],\
+        parameters["normalize_stats"]
+def store_mp_parameters(filename, sq_vertices_original, sq_transformation, normalize_stats):
+    '''
+    The function to store the parameters from MP in the pickle file
+    '''
+    a = {
+        "sq_vertices_original": sq_vertices_original,
+        "sq_transformation": sq_transformation,
+        "normalize_stats": normalize_stats
+    }
+    with open(filename, 'wb') as handle:
+        pickle.dump(a, handle, protocol=pickle.HIGHEST_PROTOCOL)
+
 ###############
-### Part III: Handle the sq in space, at arbitrary location
+### Part III: Handle a group of sq's in space, at arbitrary location
 ##############  
-def find_sq_closest(point_select, sq_transformation, norm_scale, displacement):
+def find_sq_closest(point_select, sq_transformation, norm_scale = 1, displacement = 0):
     '''
     The function to find the closest sq to the selected point, as the associated sq to
     the selected point
@@ -306,10 +403,6 @@ def find_sq_closest(point_select, sq_transformation, norm_scale, displacement):
         sq_tran = sq_tran_dict["transformation"]
         pc_tran = sq_tran_dict["points"]
         parameters = sq_tran_dict["sq_parameters"]
-        
-        # Apply the displacement
-        sq_tran[0:3, 3] = sq_tran[0:3, 3] + displacement
-        pc_tran = pc_tran + displacement
 
         
 
@@ -321,25 +414,38 @@ def find_sq_closest(point_select, sq_transformation, norm_scale, displacement):
         a3 = parameters["size"][2] * norm
         
         # Find the point's coordinate in the sq's frame
-        pos_sq = np.matmul(np.linalg.inv(sq_tran), np.array([\
-                    [pos[0]], [pos[1]], [pos[2]], [1]]\
-                ))
-
-        x,y,z,_ = pos_sq.flatten()
+        sq_rot = sq_tran[0:3, 0:3]
+        sq_t = sq_tran[0:3, 3].reshape(3, -1)
+        pos_sq = np.matmul(sq_rot.T, np.array([\
+                    [pos[0]], [pos[1]], [pos[2]]]\
+                )) - np.matmul(sq_rot.T, sq_t)
         
-        # Calculate the evaluation value
-        x1 = x/a1
-        y1 = y/a2
-        z1 = z/a3
+        # Find the sampled points on sq in the sq's frame
+        pos_sq_points = np.matmul(sq_rot.T, pc_tran.T)\
+                    - np.matmul(sq_rot.T, sq_t)
+        
+        # Directly obtain the distances and find the minimum one
+        dist = np.min(np.linalg.norm(pos_sq - pos_sq_points, axis=0))
 
-        # Calculate the evaluation value F(x0, y0, z0)
-        val1 = np.power(x1*x1, 1/epsilon2) + np.power(y1*y1, 1/epsilon2)
-        val2 = np.power(val1, epsilon2/epsilon1) + np.power(z1*z1, 2/epsilon1)
-        # beta calculation
-        beta = np.power(val2, -epsilon1/2)
+        # Analytical approximate method
+        # x,y,z,_ = pos_sq.flatten()
+        
+        # # Calculate the evaluation value
+        # x1 = x/a1
+        # y1 = y/a2
+        # z1 = z/a3
 
-        dist = abs(1 - beta) * np.sqrt(x**2 + y**2 + z**2)
+        # # Calculate the evaluation value F(x0, y0, z0)
+        # val1 = np.power(x1*x1, 2/epsilon2) + np.power(y1*y1, 2/epsilon2)
+        # val2 = np.power(val1, epsilon2/epsilon1) + np.power(z1*z1, 2/epsilon1)
+        # # beta calculation
+        # beta = np.power(val2, -epsilon1/2)
 
+        # dist = abs(1 - beta) * np.sqrt(x**2 + y**2 + z**2)
+
+        # Apply the final displacement (observed in deep learning methods)
+        sq_tran[0:3, 3] = sq_tran[0:3, 3] + displacement
+        pc_tran = pc_tran + displacement
         # Find the closest sq to the selected point
         if dist < dist_min :
             dist_min = dist
@@ -354,7 +460,7 @@ def find_sq_closest(point_select, sq_transformation, norm_scale, displacement):
 
 
 
-def grasp_pose_predict_sq_closest(sq_closest, gripper_attr, norm_scale, sample_number=20):
+def grasp_pose_predict_sq_closest(sq_closest, gripper_attr, norm_scale = 1, sample_number = 20):
     '''
     The function to predict grasp poses on the sq closest to the selected point
     Input: sq_closest: attributes of the closest sq
@@ -415,3 +521,100 @@ def grasp_pose_predict_sq_closest(sq_closest, gripper_attr, norm_scale, sample_n
         grasp_poses = grasp_poses + grasp_poses_second
 
     return grasp_poses
+
+
+
+
+def nms_sq_bbox(sq_predict, iou_threshold = 0.5):
+    '''
+    The function to apply Nonmaximum Suppresion on the bounding boxes
+    around the predicted superquadrics
+
+    Input: sq_predict: parameters of the predicted sq's 
+    Each row of it follows the format:
+    [epsilon1, epsilon2, axis_length_1, axis_length_2, axis_length_3, roll, pitch, yawl
+    translation_1, translation_2, translation_3]
+    iou_threshold: the threshold used in NMS
+
+    Return: 
+    sq_filter: parameters of the filtered sq's
+    '''
+    # The indices of the rows to keep
+    keep_idx = []
+    bbox = []
+    # Read the sq attributes in each file
+    for i in range(sq_predict.shape[0]):
+        # Read the superquadrics' parameters
+        e1, e2, a1, a2, a3, r, p, y, t1, t2, t3 = sq_predict[i, :]
+        if e1 < 0.01:
+            e1 = 0.01
+        if e2 < 0.01:
+            e2 = 0.01
+
+        # Parameters for transformation
+        translation = np.array([t1, t2, t3])
+
+        def eul2rotm(eul):
+            '''
+            The function to convert euler angles into a rotation matrix
+            '''
+            Rot = np.zeros((3,3))
+            ct = np.cos(eul)
+            st = np.sin(eul)
+            Rot[0, 0] = ct[1] * ct[0]
+            Rot[0, 1] = st[2] * st[1] * ct[0] - ct[2] * st[0]
+            Rot[0, 2] = ct[2] * st[1] *ct[0] + st[2] * st[0]
+            Rot[1, 0] = ct[1] * st[0]
+            Rot[1, 1] = st[2] * st[1] * st[0] + ct[2]*ct[0]
+            Rot[1, 2] = ct[2] * st[1]* st[0] - st[2]*ct[0]
+            Rot[2, 0] = -st[1]
+            Rot[2, 1] = st[2] * ct[1]
+            Rot[2, 2] = ct[2] * ct[1]     
+
+            return Rot 
+        rot = eul2rotm(np.array([r, p, y]))
+
+        # Points on the bounding box of the sq
+        pc = np.array([
+            [-a1, -a2, -a3],
+            [a1, -a2, -a3],
+            [a1, a2, -a3],
+            [-a1, a2, -a3],
+            [-a1, -a2, a3],
+            [a1, -a2, a3],
+            [a1, a2, a3],
+            [-a1, a2, a3]
+        ])
+
+        # Apply the transformation
+
+        # Obtain the correct point coordinates in the normalized frame
+        pc_tran = np.matmul(rot, pc.T) + translation.reshape(3, -1)
+        pc_tran = pc_tran.T
+        bbox.append(pc_tran)
+
+    bbox = np.array(bbox)
+    
+    # Convert the bbox to tensor, so we can use the library from pytorch3d
+    bbox = torch.from_numpy(bbox).float()
+
+    _, iou_3d = box3d_overlap(bbox, bbox)
+
+    # NMS to filter out redundant bboxes
+    idx_cands = list(range(iou_3d.shape[0]))
+    while idx_cands:
+        idx = idx_cands.pop(0)
+        keep_idx.append(idx)
+
+        for j in idx_cands:
+            iou = iou_3d[idx, j]
+            if iou > iou_threshold:
+                idx_cands.remove(j)
+    
+    # Return the filtered sq's
+    keep_idx = np.array(keep_idx)
+    iou_3d = iou_3d[keep_idx, :]
+    iou_3d = iou_3d[:, keep_idx]
+    return sq_predict[keep_idx, :], bbox[keep_idx, :], iou_3d
+
+

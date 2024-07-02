@@ -22,11 +22,11 @@ norm = 122.8209
 x,y,z = 14.79, 0.7060, -17.01035
 
 scale = 0.1
-epsilon1 = 0.8
-epsilon2 = 0.2
+epsilon1 = 0.1
+epsilon2 = 0.1
 a1 = 0.1232 * norm
 a2 = 0.13 * norm
-a3 = 0.1445 * norm
+a3 = 0.8 * norm
 x1 = x/a1
 y1 = y/a2
 z1 = z/a3

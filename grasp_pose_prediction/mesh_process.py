@@ -104,7 +104,7 @@ def collision_test(mesh, gripper_points, threshold):
     #     return True
     # else:
     #     return False
-    # 
+    
     # Method 2: use ray casting functionality from open3d 
     mesh_tri = o3d.t.geometry.TriangleMesh.from_legacy(mesh)
 
@@ -164,16 +164,31 @@ def collision_test_local(mesh, gripper_points, grasp_pose, gripper_attr, thresho
     if mesh_collision_region.is_empty():
         return False, bbox, mesh_collision_region
     ## Find out the minimum dists
-    pc_v = np.asarray(mesh_collision_region.vertices)
-    pc_f = np.asarray(mesh_collision_region.triangles)
-    dists, _, _ = pcu.closest_points_on_mesh(gripper_points.astype("float64", order='C'), pc_v, pc_f)
-    dist_min = np.min(dists)
-    # print(dist_min)
+    # Method 1: Use pcu library
+    # pc_v = np.asarray(mesh_collision_region.vertices)
+    # pc_f = np.asarray(mesh_collision_region.triangles)
+    # dists, _, _ = pcu.closest_points_on_mesh(gripper_points.astype("float64", order='C'), pc_v, pc_f)
+    # dist_min = np.min(dists)
+    # # print(dist_min)
+    # if dist_min < threshold:
+    #     bbox.color = (1.0, 0, 0)
+    #     return True, bbox, mesh_collision_region
+    # else:
+    #     bbox.color = (0, 1, 0)
+    #     return False, bbox, mesh_collision_region
+    
+    # Method 2: Use RayCast scene in open3d
+    # Create a scene and add the triangle mesh
+    mesh_tri = o3d.t.geometry.TriangleMesh.from_legacy(mesh_collision_region)
+    scene = o3d.t.geometry.RaycastingScene()
+    _ = scene.add_triangles(mesh_tri)  # we do not need the geometry ID for mesh
+
+    query_points = o3d.core.Tensor(gripper_points, dtype=o3d.core.Dtype.Float32)
+    signed_distance = scene.compute_signed_distance(query_points).numpy()
+    dist_min = np.min(signed_distance)
     if dist_min < threshold:
-        bbox.color = (1.0, 0, 0)
         return True, bbox, mesh_collision_region
     else:
-        bbox.color = (0, 1, 0)
         return False, bbox, mesh_collision_region
 
 def antipodal_test(mesh, grasp_pose, gripper_attr, k, theta):

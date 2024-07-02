@@ -3,12 +3,13 @@ import numpy as np
 from mesh_process import *
 from scipy.spatial.transform import Rotation as R
 # Read the file as a triangular mesh
-mesh = o3d.io.read_triangle_mesh("./data/nerf/chair_sim_depth/chair_upper.obj")
+mesh = o3d.io.read_triangle_mesh("./data/nerf/chair5_pm/chair_upper.obj")
 vis= o3d.visualization.Visualizer()
 vis.create_window()
 
+nerf_scale = 1 / 64
 # Define the gripper
-scale = 10
+scale = 10 * nerf_scale
 gripper_width = 1 * scale
 gripper_length = 1 * scale
 # Construct the gripper
@@ -63,15 +64,16 @@ box = np.vstack((box_upper, box_lower))
 # SE(3) Transformation on the gripper
 transformation = np.eye(4)
 
-# quat = [np.sqrt(2)/2, np.sqrt(2)/2, np.sin(np.pi/3), np.cos(np.pi/3)]
-# rot = R.from_quat(np.asarray(quat)).as_matrix()
-# transformation[0:3, 0:3] = rot
-# transformation[0:3, 3] = transformation[0:3, 3] - np.array([20, 20, 10])
-transformation = np.array(
-[[ 7.79390061e-03 , 8.61591416e-02 ,-9.96250901e-01,  1.83359385e+01],
- [ 9.87712259e-01 ,-1.56176473e-01, -5.77956784e-03,  3.00611938e+01],
- [-1.56088914e-01 ,-9.83964182e-01, -8.63176643e-02 , 2.90297886e+01],
- [ 0.00000000e+00, 0.00000000e+00,  0.00000000e+00 , 1.00000000e+00]])
+quat = [0, 0, np.sin(-np.pi/4), np.cos(-np.pi/4)]
+rot = R.from_quat(np.asarray(quat)).as_matrix()
+transformation[0:3, 0:3] = rot
+transformation[0:3, 3] = transformation[0:3, 3] - np.array([0, 35, -18]) * nerf_scale
+# transformation = np.array(
+# [[ 7.79390061e-03 , 8.61591416e-02 ,-9.96250901e-01,  1.83359385e+01],
+#  [ 9.87712259e-01 ,-1.56176473e-01, -5.77956784e-03,  3.00611938e+01],
+#  [-1.56088914e-01 ,-9.83964182e-01, -8.63176643e-02 , 2.90297886e+01],
+#  [ 0.00000000e+00, 0.00000000e+00,  0.00000000e+00 , 1.00000000e+00]])
+# transformation[0:3, 3] = transformation[0:3, 3] * nerf_scale
 grasp_pose = np.eye(4)
 grasp_pose = np.matmul(transformation, grasp_pose)
 
@@ -85,13 +87,13 @@ grasp_pose_pc.points = o3d.utility.Vector3dVector(gripper_points_sample)
 
 
 # Test Collision
-res, bbox, mesh_test= collision_test_local(mesh, gripper_points_sample, grasp_pose, gripper_attr, 0.05*gripper_width)
-#res = collision_test(mesh, gripper_points, 0.05 * gripper_width)
+# res, bbox, mesh_test= collision_test_local(mesh, gripper_points_sample, grasp_pose, gripper_attr, 0.05*gripper_width)
+res = collision_test(mesh, gripper_points, 0.02 * gripper_width)
 if res:
     grasp_pose_pc.paint_uniform_color((1, 0, 0))
 else:
     grasp_pose_pc.paint_uniform_color((0, 1, 0))
-mesh_test.paint_uniform_color((1, 0, 0))
+#mesh_test.paint_uniform_color((1, 0, 0))
 
 # Plot out the fundamental frame
 frame = o3d.geometry.TriangleMesh.create_coordinate_frame()
@@ -105,8 +107,8 @@ vec_test.transform(grasp_pose)
 vis.add_geometry(grasp_pose_pc)
 vis.add_geometry(frame)
 vis.add_geometry(mesh)
-vis.add_geometry(bbox)
+#vis.add_geometry(bbox)
 vis.add_geometry(vec_test)
-vis.add_geometry(mesh_test)
+#vis.add_geometry(mesh_test)
 vis.run()
 vis.destroy_window()
