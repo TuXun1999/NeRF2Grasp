@@ -274,15 +274,32 @@ def point_select_in_space(camera_pose, ray_dir, mesh):
 
     # Cast the ray from the camera
     camera_location = camera_pose[0:3, 3]
-    ray = list(np.hstack((camera_location, ray_dir)))
-    rays = o3d.core.Tensor([ray],
-                       dtype=o3d.core.Dtype.Float32)
+    if len(ray_dir.shape) == 1: # If there is only one ray
+        ray = np.hstack((camera_location, ray_dir))
+        rays = o3d.core.Tensor([ray], dtype=o3d.core.Dtype.Float32)
 
-    ans = scene.cast_rays(rays)
+        ans = scene.cast_rays(rays)
 
-    # Obtain the distance upon hitting
-    point_select_distance = min(ans['t_hit'].numpy()[0], 200)
+        # Obtain the distance upon hitting
+        point_select_distance = np.minimum(ans['t_hit'].numpy()[0], 200)
 
-    # Calculate the 3D point coordinates
-    pos = camera_pose[0:3, 3] + ray_dir * point_select_distance
+        # Calculate the 3D point coordinates
+        pos = camera_pose[0:3, 3] + ray_dir * point_select_distance
+
+    else:
+        camera_location_stack = np.repeat(camera_location.reshape(1, -1), \
+                                          ray_dir.shape[0], axis=0) 
+        ray = np.hstack((camera_location_stack, \
+                                        ray_dir))
+        rays = o3d.core.Tensor.from_numpy(np.float32(ray))
+
+        ans = scene.cast_rays(rays)
+
+        # Obtain the distance upon hitting
+        point_select_distance = np.minimum(ans['t_hit'].numpy(), 200)
+
+        # Calculate the 3D point coordinates
+        pos = camera_pose[0:3, 3] + ray_dir * point_select_distance.reshape(-1,1)
+
+    
     return pos, point_select_distance

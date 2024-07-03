@@ -1,7 +1,7 @@
 import numpy as np
 import os
 import sys
-sys.path.append(os.getcwd() + "/Marching_Primitives")
+sys.path.append(os.getcwd())
 
 import open3d as o3d
 
@@ -13,9 +13,9 @@ from image_process import *
 from scipy.spatial.transform import Rotation as R
 
 # Necessary Packages for sq parsing
-from sq_split import sq_predict_mp
-from MPS import add_mp_parameters
-from mesh2sdf_convert import mesh2sdf_csv
+from Marching_Primitives.sq_split import sq_predict_mp
+from Marching_Primitives.MPS import add_mp_parameters
+from Marching_Primitives.mesh2sdf_convert import mesh2sdf_csv
 '''
 Main Program of the whole grasp pose prediction module
 using Marching Primitives to split the target object into sq's
@@ -46,10 +46,10 @@ def predict_grasp_pose_sq(parser, argv):
     print(img_file)
     ## Obtain the ray direction of the selected point in space 
     # NOTE: Previous method to select the grasp point manually
-    # ray_dir, camera_pose, _, nerf_scale = point_select_from_image(img_dir, img_file, save_fig=True)
-    # ray_dir = ray_dir / np.linalg.norm(ray_dir)
-    _, camera_pose,nerf_scale = read_proj_from_json(img_dir, img_file)
-
+    ray_dir, camera_pose, _, nerf_scale = point_select_from_image(img_dir, img_file, save_fig=True)
+    ray_dir = ray_dir / np.linalg.norm(ray_dir)
+    #_, camera_pose,nerf_scale = read_proj_from_json(img_dir, img_file)
+    print(ray_dir)
     ## Create files as input to other modules
     # Specify the mesh file
     filename=img_dir + "/" + args.mesh_name
@@ -81,22 +81,22 @@ def predict_grasp_pose_sq(parser, argv):
 
     ## Determine the location of the selected point in space
     # NOTE: old method to select the picked grasp point manually
-    # pos, dist  = point_select_in_space(camera_pose, ray_dir, mesh)
-    # print("========================")
-    # print("Selected Point in Space: ")
-    # print("[%.2f, %.2f, %.2f]"%(pos[0], pos[1], pos[2]))
-    # print(dist)
-    # print("========================")
-    # print('Visualizing...')
+    pos, dist  = point_select_in_space(camera_pose, ray_dir, mesh)
+    print("========================")
+    print("Selected Point in Space: ")
+    print("[%.2f, %.2f, %.2f]"%(pos[0], pos[1], pos[2]))
+    print(dist)
+    print("========================")
+    print('Visualizing...')
 
-    # # TODO: Crop a local region at the specified point
+    # TODO: Crop a local region at the specified point
 
-    # # Add a sphere to the selected point
-    # ball_select =  o3d.geometry.TriangleMesh.create_sphere(radius=1.0, resolution=20)
-    # ball_select.scale(1/64 * nerf_scale, [0, 0, 0])
+    # Add a sphere to the selected point
+    ball_select =  o3d.geometry.TriangleMesh.create_sphere(radius=1.0, resolution=20)
+    ball_select.scale(1/64 * nerf_scale, [0, 0, 0])
 
-    # ball_select.translate((pos[0], pos[1], pos[2]))
-    # ball_select.paint_uniform_color((1, 0, 0))
+    ball_select.translate((pos[0], pos[1], pos[2]))
+    ball_select.paint_uniform_color((1, 0, 0))
 
     # Read the csv file containing sdf value
     if args.normalize:
@@ -159,35 +159,35 @@ def predict_grasp_pose_sq(parser, argv):
     ## Find the sq associated to the selected point
     # Evaluate the transformation of each sq & find the closest sq
     # NOTE: old method to select the grasp point manually
-    # sq_closest, idx = find_sq_closest(pos, sq_transformation)
+    sq_closest, idx = find_sq_closest(pos, sq_transformation)
 
     # New method: find the sq, the center of which is closest to the camera
-    camera_t = camera_pose[0:3, 3]
-    sq_centers = []
-    for val in sq_transformation:
-        sq_center = val["transformation"][0:3 , 3]
-        sq_centers.append(sq_center)
-    sq_centers = np.array(sq_centers)
+    # camera_t = camera_pose[0:3, 3]
+    # sq_centers = []
+    # for val in sq_transformation:
+    #     sq_center = val["transformation"][0:3 , 3]
+    #     sq_centers.append(sq_center)
+    # sq_centers = np.array(sq_centers)
 
-    # Compute the convex hull
-    pc_sq_centers= o3d.geometry.PointCloud()
-    pc_sq_centers.points = o3d.utility.Vector3dVector(sq_centers)
-    print(sq_center.shape)
-    hull, hull_indices = pc_sq_centers.compute_convex_hull()
-    hull_ls = o3d.geometry.LineSet.create_from_triangle_mesh(hull)
-    hull_ls.paint_uniform_color((1, 0, 0))
+    # # Compute the convex hull
+    # pc_sq_centers= o3d.geometry.PointCloud()
+    # pc_sq_centers.points = o3d.utility.Vector3dVector(sq_centers)
+    # print(sq_center.shape)
+    # hull, hull_indices = pc_sq_centers.compute_convex_hull()
+    # hull_ls = o3d.geometry.LineSet.create_from_triangle_mesh(hull)
+    # hull_ls.paint_uniform_color((1, 0, 0))
 
-    # Find the center of sq that is closest to the camera
-    hull_vertices = np.array(hull_ls.points)
-    hull_v_idx = np.argmin(np.linalg.norm(hull_vertices - camera_t, axis=1))
-    idx = hull_indices[hull_v_idx]
+    # # Find the center of sq that is closest to the camera
+    # hull_vertices = np.array(hull_ls.points)
+    # hull_v_idx = np.argmin(np.linalg.norm(hull_vertices - camera_t, axis=1))
+    # idx = hull_indices[hull_v_idx]
 
-    sq_closest = sq_transformation[idx]
-    ball_select =  o3d.geometry.TriangleMesh.create_sphere(radius=1.0, resolution=20)
-    ball_select.scale(1/64 * nerf_scale, [0, 0, 0])
+    # sq_closest = sq_transformation[idx]
+    # ball_select =  o3d.geometry.TriangleMesh.create_sphere(radius=1.0, resolution=20)
+    # ball_select.scale(1/64 * nerf_scale, [0, 0, 0])
 
-    ball_select.translate((sq_centers[idx][0], sq_centers[idx][1], sq_centers[idx][2]))
-    ball_select.paint_uniform_color((1, 0, 0))
+    # ball_select.translate((sq_centers[idx][0], sq_centers[idx][1], sq_centers[idx][2]))
+    # ball_select.paint_uniform_color((1, 0, 0))
     # Delete the point cloud of the associated sq (to draw a new one; avoid point overlapping)
     sq_vertices_original.pop(idx)
     
